@@ -1,6 +1,45 @@
 const ApiError = require('../utils/ApiError');
-const { Project, ProjectMember, User, Task } = require('../models');
+const { Project, ProjectMember, User, Task, ManagerEmployeeAccess } = require('../models');
 const { logAudit } = require('./audit.service');
+
+// F0.4 S4: a manager may only touch a project's membership if the project is
+// theirs or contains at least one employee in their team. Admins are unrestricted.
+const assertCanManageProjectMembers = async (project, user) => {
+  if (user.role === 'ADMIN') return;
+  if (project.created_by === user.id) return;
+
+  if (user.role === 'MANAGER') {
+    const team = await ManagerEmployeeAccess.findAll({
+      where: { manager_id: user.id },
+      attributes: ['employee_id'],
+    });
+    const teamIds = team.map((t) => t.employee_id);
+    const members = await ProjectMember.findAll({
+      where: { project_id: project.id },
+      attributes: ['employee_id'],
+    });
+    if (members.some((m) => teamIds.includes(m.employee_id))) return;
+  }
+
+  throw ApiError.forbidden('You are not allowed to manage members of this project');
+};
+
+// Same rule for members chosen at creation time.
+const assertCanAssignMembers = async (memberIds, user) => {
+  if (!memberIds || memberIds.length === 0 || user.role === 'ADMIN') return;
+  if (user.role !== 'MANAGER') {
+    throw ApiError.forbidden('Only admins and managers can set project members');
+  }
+  const team = await ManagerEmployeeAccess.findAll({
+    where: { manager_id: user.id },
+    attributes: ['employee_id'],
+  });
+  const teamIds = new Set(team.map((t) => t.employee_id));
+  const unauthorized = memberIds.filter((id) => !teamIds.has(id));
+  if (unauthorized.length > 0) {
+    throw ApiError.forbidden('You can only add employees from your team to a project');
+  }
+};
 
 const listProjects = async (user) => {
   const include = [
@@ -57,6 +96,8 @@ const getProjectById = async (id, user) => {
 };
 
 const createProject = async (data, user) => {
+  await assertCanAssignMembers(data.member_ids, user);
+
   const project = await Project.create({
     name: data.name,
     description: data.description,
@@ -113,6 +154,9 @@ const addProjectMember = async (projectId, employeeId, actor) => {
   const project = await Project.findByPk(projectId);
   if (!project) throw ApiError.notFound('Project not found');
 
+  await assertCanManageProjectMembers(project, actor);
+  await assertCanAssignMembers([employeeId], actor);
+
   const existing = await ProjectMember.findOne({
     where: { project_id: projectId, employee_id: employeeId },
   });
@@ -136,6 +180,11 @@ const addProjectMember = async (projectId, employeeId, actor) => {
 };
 
 const removeProjectMember = async (projectId, employeeId, actor) => {
+  const project = await Project.findByPk(projectId);
+  if (!project) throw ApiError.notFound('Project not found');
+
+  await assertCanManageProjectMembers(project, actor);
+
   const member = await ProjectMember.findOne({
     where: { project_id: projectId, employee_id: employeeId },
   });

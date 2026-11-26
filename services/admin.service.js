@@ -15,6 +15,7 @@ const {
 } = require('../models');
 const { logAudit } = require('./audit.service');
 const { loadCalendarData } = require('./attendance.service');
+const { getBoardSummary } = require('./attendance-status.service');
 
 const getAdminDashboard = async (query = {}) => {
   // Use local date, not UTC, to avoid off-by-one in IST and similar timezones
@@ -125,8 +126,13 @@ const getAdminDashboard = async (query = {}) => {
     });
   });
 
+  // Today's attendance summary (present / not yet / absent, cutoff time).
+  // Only meaningful for today; the submission panels remain date-driven.
+  const attendanceToday = await getBoardSummary();
+
   return {
     submission_date: date,
+    attendance_today: attendanceToday,
     total_employees: totalEmployees,
     total_reporting_users: activeReportingUsers.length,
     total_managers: totalManagers,

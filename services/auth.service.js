@@ -5,7 +5,8 @@ const { User, Department } = require('../models');
 const { logAudit } = require('./audit.service');
 
 const generateToken = (user) => {
-  const secret = process.env.JWT_SECRET || 'task-management-secret-key-12345';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET is required');
   const expiresIn = process.env.JWT_EXPIRES_IN || '24h';
   return jwt.sign(
     {

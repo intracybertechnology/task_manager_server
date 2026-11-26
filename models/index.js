@@ -17,7 +17,7 @@ const AuditLog = require('./AuditLog');
 const CompanySetting = require('./CompanySetting');
 const CompanyOffDay = require('./CompanyOffDay');
 const AttendanceException = require('./AttendanceException');
-
+const Attendance = require('./Attendance');
 // Department <-> User
 Department.hasMany(User, { foreignKey: 'department_id', as: 'users' });
 User.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
@@ -120,6 +120,10 @@ AttendanceException.belongsTo(User, { foreignKey: 'employee_id', as: 'employee' 
 AttendanceException.belongsTo(User, { foreignKey: 'marked_by', as: 'marker' });
 User.hasMany(AttendanceException, { foreignKey: 'employee_id', as: 'attendanceExceptions' });
 
+// Attendance (self-marked presence) <-> User
+Attendance.belongsTo(User, { foreignKey: 'employee_id', as: 'employee' });
+User.hasMany(Attendance, { foreignKey: 'employee_id', as: 'attendanceRecords' });
+
 module.exports = {
   sequelize,
   User,
@@ -140,4 +144,5 @@ module.exports = {
   CompanySetting,
   CompanyOffDay,
   AttendanceException,
+  Attendance,
 };

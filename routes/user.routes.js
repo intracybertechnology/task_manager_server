@@ -15,7 +15,8 @@ router.use(authenticate);
 
 // List and get user (Admin and Manager can view lists, Manager to select assignees)
 router.get('/', authorize('ADMIN', 'MANAGER'), userController.listUsers);
-router.get('/:id', userController.getUserById);
+// F0.4 S3: profile detail is admin/manager only; previously any user could read any profile.
+router.get('/:id', authorize('ADMIN', 'MANAGER'), userController.getUserById);
 
 // Admin-only management
 router.post('/', authorize('ADMIN'), validate(createUserSchema), userController.createUser);

@@ -10,7 +10,10 @@ const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'task-management-secret-key-12345';
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      return next(ApiError.unauthorized('Server is missing JWT configuration'));
+    }
 
     const decoded = jwt.verify(token, secret);
     const user = await User.findByPk(decoded.id, {

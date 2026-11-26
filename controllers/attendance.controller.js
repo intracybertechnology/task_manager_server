@@ -1,5 +1,18 @@
 const asyncHandler = require('../utils/asyncHandler');
 const attendanceService = require('../services/attendance.service');
+const attendanceStatusService = require('../services/attendance-status.service');
+
+// Admin live board for today (Present / Not yet / Absent / Other)
+const getTodayBoard = asyncHandler(async (req, res) => {
+  const data = await attendanceStatusService.getTodayBoard();
+  res.status(200).json({ success: true, data });
+});
+
+// Admin override of a cutoff absence
+const setStatus = asyncHandler(async (req, res) => {
+  const data = await attendanceStatusService.setStatus(req.user, req.body);
+  res.status(200).json({ success: true, message: 'Attendance status updated', data });
+});
 
 // Off days
 const listOffDays = asyncHandler(async (req, res) => {
@@ -39,6 +52,8 @@ const removeAttendanceException = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  getTodayBoard,
+  setStatus,
   listOffDays,
   addOffDay,
   bulkAddOffDays,

@@ -18,15 +18,19 @@ const attendanceRoutes = require('./routes/attendance.routes');
 
 const app = express();
 
-// Security and utility middleware
-app.use(helmet());
-app.use(cors({
-  origin: '*',
+// F0.4 S2: restrict CORS to the real app origin(s), comma-separated in CORS_ORIGIN.
+const { allowedOrigins } = require('./realtime');
+const corsOptions = {
+  origin: allowedOrigins(),
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Client-Date'],
-}));
+};
+
+// Security and utility middleware
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(cors(corsOptions));
 // Ensure OPTIONS preflight requests are handled for all routes
-app.options('*', cors());
+app.options('*', cors(corsOptions));
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
