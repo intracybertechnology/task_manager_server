@@ -9,6 +9,9 @@ const createTaskSchema = {
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
     start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format must be YYYY-MM-DD').nullable().optional(),
     due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format must be YYYY-MM-DD').nullable().optional(),
+    // The single day this task belongs to. Optional: with no date it stays on
+    // the assignee's Today list until completed.
+    task_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format must be YYYY-MM-DD').nullable().optional(),
     estimated_minutes: z.number().int().positive().nullable().optional(),
   }),
 };

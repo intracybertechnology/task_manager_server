@@ -48,6 +48,7 @@ const createTask = async (data, user) => {
     start_date,
     due_date,
     estimated_minutes,
+    task_date,
   } = data;
 
   // Verify all assignees exist and are active employees
@@ -82,6 +83,9 @@ const createTask = async (data, user) => {
         priority: priority || 'MEDIUM',
         start_date: start_date || null,
         due_date: due_date || null,
+        // The day this task belongs to (optional). Without it, the task stays
+        // on the assignee's Today list until completed.
+        task_date: task_date || null,
         estimated_minutes: estimated_minutes || null,
         created_by: user.id,
         is_archived: false,
@@ -255,7 +259,10 @@ const getMyToday = async (userId, now = new Date()) => {
   const clock = require('../utils/clock');
   const { TaskTemplate } = require('../models');
   const { Attendance } = require('../models');
+  const { Op } = require('sequelize');
   const today = clock.companyToday(now);
+
+  const CLOSED = ['COMPLETED', 'CANCELLED'];
 
   const rows = await TaskAssignee.findAll({
     where: { employee_id: userId },
@@ -264,8 +271,17 @@ const getMyToday = async (userId, now = new Date()) => {
         model: Task,
         as: 'task',
         required: true,
-        where: { is_archived: false, task_date: today },
-        attributes: ['id', 'title', 'description', 'task_date', 'start_time', 'end_time', 'task_type', 'auto_generated', 'reassigned_from', 'priority'],
+        where: {
+          is_archived: false,
+          // Recurring copies belong to exactly one day; assigned tasks belong to
+          // a window of days (or no day at all) and stay until they are closed.
+          [Op.or]: [
+            { task_date: today },
+            { task_type: 'ONE_OFF', task_date: null },
+            { task_type: 'ADDITIONAL', task_date: null },
+          ],
+        },
+        attributes: ['id', 'title', 'description', 'task_date', 'start_date', 'due_date', 'start_time', 'end_time', 'task_type', 'auto_generated', 'reassigned_from', 'priority'],
         include: [
           { model: User, as: 'creator', attributes: ['id', 'first_name', 'last_name'] },
           { model: TaskTemplate, as: 'template', attributes: ['id', 'frequency'], required: false },
@@ -276,14 +292,26 @@ const getMyToday = async (userId, now = new Date()) => {
   });
 
   const tasks = rows
+    .filter((a) => {
+      const t = a.task;
+      const recurring = t.task_type === 'RECURRING' || t.auto_generated;
+      if (recurring) return t.task_date === today; // dated by the generator
+      // Assigned: open work stays visible; a start date in the future hides it.
+      if (CLOSED.includes(a.status)) return false;
+      if (t.start_date && t.start_date > today) return false;
+      return true;
+    })
     .map((a) => {
       const t = a.task;
       const recurring = t.task_type === 'RECURRING' || t.auto_generated;
+      const overdue = Boolean(t.due_date && t.due_date < today);
       return {
         assignment_id: a.id,
         task_id: t.id,
         title: t.title,
         description: t.description,
+        task_date: t.task_date,
+        due_date: t.due_date,
         start_time: t.start_time,
         end_time: t.end_time,
         priority: t.priority,
@@ -292,6 +320,9 @@ const getMyToday = async (userId, now = new Date()) => {
         frequency: t.template?.frequency || null,
         assigned_by: a.assigner ? `${a.assigner.first_name} ${a.assigner.last_name}` : null,
         created_by: t.creator ? `${t.creator.first_name} ${t.creator.last_name}` : null,
+        // overdue: past its due date and still open. missed: the 23:10 job flagged it.
+        overdue,
+        missed: a.status === 'MISSED',
       };
     })
     .sort((a, b) => String(a.start_time || '99:99').localeCompare(String(b.start_time || '99:99')));
