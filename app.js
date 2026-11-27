@@ -15,6 +15,7 @@ const worklogRoutes = require('./routes/worklog.routes');
 const managerRoutes = require('./routes/manager.routes');
 const adminRoutes = require('./routes/admin.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use(`${API_PREFIX}/worklogs`, worklogRoutes);
 app.use(`${API_PREFIX}/manager`, managerRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/attendance`, attendanceRoutes);
+app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 
 // Catch 404 and handle errors
 app.use(notFound);

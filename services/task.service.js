@@ -119,6 +119,13 @@ const createTask = async (data, user) => {
 
     await transaction.commit();
 
+    // After commit only: a notification for work that was rolled back would lie.
+    await require('./notification-events.service').taskAssigned({
+      actor: user,
+      task,
+      employeeIds: assignee_ids,
+    });
+
     return await getTaskById(task.id, user);
   } catch (error) {
     await transaction.rollback();
@@ -212,6 +219,7 @@ const getMyTasks = async (userId, query = {}) => {
           },
         ],
       },
+      { model: User, as: 'assigner', attributes: ['id', 'first_name', 'last_name', 'email'] },
       {
         model: TaskStatusHistory,
         as: 'statusHistories',
@@ -226,6 +234,9 @@ const getMyTasks = async (userId, query = {}) => {
     assignment_id: a.id,
     assignment_status: a.status,
     assigned_at: a.assigned_at,
+    // The person who made THIS assignment. Usually the same as task.creator,
+    // but not when someone else added this employee later.
+    assigned_by: a.assigner,
     completed_at: a.completed_at,
     task: a.task,
     status_histories: a.statusHistories,
@@ -357,6 +368,13 @@ const addAssignees = async (taskId, employeeIds, user) => {
     });
 
     await transaction.commit();
+
+    await require('./notification-events.service').taskAssigned({
+      actor: user,
+      task,
+      employeeIds: newEmpIds,
+    });
+
     return await getTaskById(taskId, user);
   } catch (err) {
     await transaction.rollback();
@@ -437,6 +455,15 @@ const updateAssignmentStatus = async (assigneeId, newStatus, note, user) => {
     });
 
     await transaction.commit();
+
+    await require('./notification-events.service').taskStatusChanged({
+      actor: user,
+      assignee,
+      task: assignee.task,
+      oldStatus,
+      newStatus,
+    });
+
     return assignee;
   } catch (err) {
     await transaction.rollback();
@@ -459,6 +486,14 @@ const addComment = async (taskId, commentText, assigneeId, user) => {
     action: 'ADD_TASK_COMMENT',
     entity_type: 'TASK_COMMENT',
     entity_id: comment.id,
+  });
+
+  // Tell the other side about the comment (never blocks the comment itself).
+  require('./notification-events.service').taskCommentAdded({
+    actor: user,
+    task,
+    commentText,
+    assigneeIds: (task.assignees || []).map((a) => a.employee_id),
   });
 
   return await TaskComment.findByPk(comment.id, {

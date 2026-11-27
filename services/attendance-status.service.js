@@ -181,6 +181,9 @@ const markMe = async (user, now = new Date()) => {
     new_values: { date: today, source: 'SELF' },
   });
 
+  // Saved above; now announce to admins (never blocks the mark).
+  require('./notification-events.service').attendanceMarked({ employee: user });
+
   return { date: today, marked_at: record.marked_at, already_marked: false };
 };
 
@@ -258,6 +261,12 @@ const setStatus = async (adminUser, { employee_id, date, status, reason }, now =
     entity_type: 'ATTENDANCE',
     entity_id: row?.id || `${employee_id}_${date}`,
     new_values: audit,
+  });
+
+  require('./notification-events.service').attendanceStatusChanged({
+    admin: adminUser,
+    employee,
+    status,
   });
 
   return { employee_id, date, status };

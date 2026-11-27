@@ -18,6 +18,7 @@ const CompanySetting = require('./CompanySetting');
 const CompanyOffDay = require('./CompanyOffDay');
 const AttendanceException = require('./AttendanceException');
 const Attendance = require('./Attendance');
+const Notification = require('./Notification');
 // Department <-> User
 Department.hasMany(User, { foreignKey: 'department_id', as: 'users' });
 User.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
@@ -124,6 +125,10 @@ User.hasMany(AttendanceException, { foreignKey: 'employee_id', as: 'attendanceEx
 Attendance.belongsTo(User, { foreignKey: 'employee_id', as: 'employee' });
 User.hasMany(Attendance, { foreignKey: 'employee_id', as: 'attendanceRecords' });
 
+// Notification <-> User
+Notification.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasMany(Notification, { foreignKey: 'user_id', as: 'notifications' });
+
 module.exports = {
   sequelize,
   User,
@@ -145,4 +150,5 @@ module.exports = {
   CompanyOffDay,
   AttendanceException,
   Attendance,
+  Notification,
 };

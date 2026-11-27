@@ -51,6 +51,12 @@ const login = async (email, password, ipAddress = null) => {
   const userData = user.toJSON();
   delete userData.password_hash;
 
+  // Login digest: outstanding tasks and an attendance reminder, saved as
+  // notifications so they survive the reload and show in the bell.
+  if (user.role !== 'ADMIN') {
+    require('./notification-events.service').loginDigest({ user });
+  }
+
   return {
     user: userData,
     token,

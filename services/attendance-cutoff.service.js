@@ -66,7 +66,6 @@ const runCutoff = async (now = new Date()) => {
 
   return { date, written, skipped: written === 0 ? 'nobody to mark absent' : null };
 };
-
 const registerCutoffJob = () => {
   jobs.registerJob({ name: 'attendance-cutoff', atHour: CUTOFF_HOUR, atMinute: CUTOFF_MINUTE, run: () => runCutoff() });
 };

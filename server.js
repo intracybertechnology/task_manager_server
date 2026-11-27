@@ -28,6 +28,7 @@ const startServer = async () => {
       console.log(`API Base URL: http://localhost:${PORT}/api/v1`);
       require('./services/autosubmit.service').startAutoSubmitJob();
       require('./services/attendance-cutoff.service').registerCutoffJob();
+      require('./services/notification.service').registerCleanupJob();
       startJobs();
     });
   } catch (error) {
