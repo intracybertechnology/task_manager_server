@@ -17,6 +17,11 @@ const getMyTasks = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: tasks });
 });
 
+const getMyToday = asyncHandler(async (req, res) => {
+  const data = await taskService.getMyToday(req.user.id);
+  res.status(200).json({ success: true, data });
+});
+
 const getTaskById = asyncHandler(async (req, res) => {
   const task = await taskService.getTaskById(req.params.id, req.user);
   res.status(200).json({ success: true, data: task });
@@ -72,6 +77,7 @@ module.exports = {
   createTask,
   listTasks,
   getMyTasks,
+  getMyToday,
   getTaskById,
   updateTask,
   addAssignees,

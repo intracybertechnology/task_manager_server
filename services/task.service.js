@@ -249,6 +249,67 @@ const getMyTasks = async (userId, query = {}) => {
   }));
 };
 
+// Today's tasks for one person, split by where they came from.
+// Used by the login popup and the Today tab. Read-only.
+const getMyToday = async (userId, now = new Date()) => {
+  const clock = require('../utils/clock');
+  const { TaskTemplate } = require('../models');
+  const { Attendance } = require('../models');
+  const today = clock.companyToday(now);
+
+  const rows = await TaskAssignee.findAll({
+    where: { employee_id: userId },
+    include: [
+      {
+        model: Task,
+        as: 'task',
+        required: true,
+        where: { is_archived: false, task_date: today },
+        attributes: ['id', 'title', 'description', 'task_date', 'start_time', 'end_time', 'task_type', 'auto_generated', 'reassigned_from', 'priority'],
+        include: [
+          { model: User, as: 'creator', attributes: ['id', 'first_name', 'last_name'] },
+          { model: TaskTemplate, as: 'template', attributes: ['id', 'frequency'], required: false },
+        ],
+      },
+      { model: User, as: 'assigner', attributes: ['id', 'first_name', 'last_name'] },
+    ],
+  });
+
+  const tasks = rows
+    .map((a) => {
+      const t = a.task;
+      const recurring = t.task_type === 'RECURRING' || t.auto_generated;
+      return {
+        assignment_id: a.id,
+        task_id: t.id,
+        title: t.title,
+        description: t.description,
+        start_time: t.start_time,
+        end_time: t.end_time,
+        priority: t.priority,
+        status: a.status,
+        source: t.reassigned_from ? 'reassigned' : recurring ? 'recurring' : 'assigned',
+        frequency: t.template?.frequency || null,
+        assigned_by: a.assigner ? `${a.assigner.first_name} ${a.assigner.last_name}` : null,
+        created_by: t.creator ? `${t.creator.first_name} ${t.creator.last_name}` : null,
+      };
+    })
+    .sort((a, b) => String(a.start_time || '99:99').localeCompare(String(b.start_time || '99:99')));
+
+  const countable = tasks.filter((t) => t.status !== 'CANCELLED');
+  const done = countable.filter((t) => t.status === 'COMPLETED').length;
+
+  const markedToday = await Attendance.findOne({ where: { employee_id: userId, date: today }, attributes: ['id'] });
+
+  return {
+    date: today,
+    recurring: tasks.filter((t) => t.source === 'recurring'),
+    assigned: tasks.filter((t) => t.source !== 'recurring'),
+    progress: { done, total: countable.length },
+    attendance_marked: Boolean(markedToday),
+  };
+};
+
 const getTaskById = async (id, user) => {
   const task = await Task.findByPk(id, {
     include: [
@@ -511,6 +572,7 @@ module.exports = {
   createTask,
   listTasks,
   getMyTasks,
+  getMyToday,
   getTaskById,
   updateTask,
   addAssignees,
