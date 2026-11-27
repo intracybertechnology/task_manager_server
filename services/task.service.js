@@ -296,8 +296,14 @@ const getMyToday = async (userId, now = new Date()) => {
       const t = a.task;
       const recurring = t.task_type === 'RECURRING' || t.auto_generated;
       if (recurring) return t.task_date === today; // dated by the generator
-      // Assigned: open work stays visible; a start date in the future hides it.
-      if (CLOSED.includes(a.status)) return false;
+      // Assigned: a task the person completed TODAY stays in the list, so the
+      // row they just ticked does not vanish under the cursor (and can be
+      // changed again). Anything completed on an earlier day is history.
+      if (a.status === 'CANCELLED') return false;
+      if (a.status === 'COMPLETED') {
+        const doneOn = a.completed_at ? clock.localDateStr(new Date(a.completed_at)) : null;
+        return doneOn === today;
+      }
       if (t.start_date && t.start_date > today) return false;
       return true;
     })
