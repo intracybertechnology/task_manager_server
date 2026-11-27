@@ -19,6 +19,14 @@ const TaskTemplate = sequelize.define('TaskTemplate', {
   },
   // The model type must match the column: the migration made `weekdays` JSON.
   weekdays: { type: DataTypes.JSON, allowNull: false, defaultValue: [] },
+  // How a monthly template picks its day:
+  //   NTH  — the Nth day of the month (day_of_month), months without it are skipped
+  //   LAST — the last day of every month (28/29/30/31 as the calendar says)
+  // Null for DAILY and WEEKLY.
+  day_rule: {
+    type: DataTypes.STRING(8),
+    allowNull: true,
+  },
   day_of_month: { type: DataTypes.INTEGER, allowNull: true },
   start_time: { type: DataTypes.STRING(5), allowNull: false },
   duration_minutes: { type: DataTypes.INTEGER, allowNull: false },

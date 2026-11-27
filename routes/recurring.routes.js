@@ -29,6 +29,11 @@ const update = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, message: 'Template updated', data });
 });
 
+const start = asyncHandler(async (req, res) => {
+  const data = await recurring.startTemplate(req.params.id, req.body || {}, req.user.id);
+  res.status(200).json({ success: true, message: 'Template started', data });
+});
+
 const deactivate = asyncHandler(async (req, res) => {
   const data = await recurring.deactivateTemplate(req.params.id, req.user.id);
   res.status(200).json({ success: true, message: 'Template deactivated', data });
@@ -45,6 +50,7 @@ router.post('/', create);
 router.post('/generate', generate);
 router.get('/:id', getOne);
 router.patch('/:id', update);
+router.post('/:id/start', start);
 router.delete('/:id', deactivate);
 
 module.exports = router;

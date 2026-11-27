@@ -1,19 +1,26 @@
 // Pure rules for recurring tasks. No database here: the job and the API both
 // call these, and they are unit-tested in tests/unit/recurring.test.js.
 //
-// The two rules that matter:
 //   1. Does a template run on a given company date?
 //   2. Which people does it apply to that date?
+//   3. What are its next run dates? (shown to the admin before saving)
 
-// 'YYYY-MM-DD' -> weekday 0..6 (0 = Sunday). Uses UTC noon so DST cannot shift the day.
+// 'YYYY-MM-DD' -> weekday 0..6 (0 = Sunday). UTC noon so DST cannot shift the day.
 const weekdayOf = (dateStr) => new Date(`${dateStr}T12:00:00Z`).getUTCDay();
 
+// Real month length, as the language's calendar defines it (leap years included).
 const daysInMonth = (dateStr) => {
   const [y, m] = dateStr.split('-').map(Number);
   return new Date(Date.UTC(y, m, 0)).getUTCDate();
 };
 
-// True when the template should produce tasks on `date`.
+// The short months a chosen day would skip, for the "is this 29th/30th risky?" warning.
+const skipsShortMonths = (day) => {
+  if (!day || day < 29) return false;
+  // Day 29 only skips February in non-leap years; 30 skips February; 31 is LAST.
+  return day === 29 || day === 30;
+};
+
 const templateRunsOn = (template, dateStr) => {
   if (!template || template.is_active === false) return false;
 
@@ -30,13 +37,12 @@ const templateRunsOn = (template, dateStr) => {
     }
 
     case 'MONTHLY': {
-      const day = Number(template.day_of_month);
-      if (!day) return false;
       const dom = Number(dateStr.slice(8, 10));
       const dim = daysInMonth(dateStr);
-      // 31 means "the last day", so a 31st-of-month template runs on 28 Feb,
-      // 30 Apr, and so on. For every other day, the date must match exactly.
-      if (day >= 31) return dom === dim;
+      const rule = template.day_rule || (Number(template.day_of_month) >= 31 ? 'LAST' : 'NTH');
+      if (rule === 'LAST') return dom === dim;
+      const day = Number(template.day_of_month);
+      if (!day) return false;
       return dom === day;
     }
 
@@ -48,10 +54,7 @@ const templateRunsOn = (template, dateStr) => {
 // Who gets the task:
 //   DEPARTMENT mode: everyone active in the template's department
 //   PEOPLE mode:     only the ADD members
-//   always:          minus EXCLUDE members
-//   minus:           anyone on leave for that date
-//   minus:           anyone the company has marked off? (off days are handled by
-//                    the caller, because the whole template is skipped that day)
+//   always:          minus EXCLUDE members, minus anyone on leave that date
 const resolveAssignees = ({
   template,
   members = [],
@@ -70,13 +73,44 @@ const resolveAssignees = ({
     base = [...new Set([...departmentMembers, ...addIds])];
   }
 
-  // Only active people, never excluded, never on leave. Order is stable.
   const activeSet = new Set(activeUsers.map((u) => u.id));
   return [...new Set(base)].filter((id) => activeSet.has(id) && !excludeIds.has(id) && !leave.has(id));
 };
 
-// Should the whole template be skipped that day? Off days and (optionally)
-// leave-only days: an off day means nobody is expected to work.
+// Should the whole template be skipped that day? Off days mean nobody works.
 const templateSkippedOn = ({ isOffDay }) => Boolean(isOffDay);
 
-module.exports = { weekdayOf, daysInMonth, templateRunsOn, resolveAssignees, templateSkippedOn };
+// ── "Next runs" for the admin screen ────────────────────────────────────────
+
+const addDays = (dateStr, n) => {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+// The next `count` dates (including today) on which this template would run,
+// ignoring off days, so the admin sees the pattern. Off days are marked, not removed.
+const nextRunDates = (template, fromDate, { count = 6, offDays = [] } = {}) => {
+  const off = new Set(offDays);
+  const out = [];
+  let cursor = fromDate;
+  // 400 days covers "day 29 in February of a leap year" from any starting month.
+  for (let i = 0; i < 400 && out.length < count; i++) {
+    if (templateRunsOn(template, cursor)) {
+      out.push({ date: cursor, is_off_day: off.has(cursor) });
+    }
+    cursor = addDays(cursor, 1);
+  }
+  return out;
+};
+
+module.exports = {
+  weekdayOf,
+  daysInMonth,
+  skipsShortMonths,
+  templateRunsOn,
+  resolveAssignees,
+  templateSkippedOn,
+  nextRunDates,
+  addDays,
+};

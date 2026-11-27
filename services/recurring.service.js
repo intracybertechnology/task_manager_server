@@ -22,7 +22,7 @@ const {
 } = require('../models');
 const { logAudit } = require('./audit.service');
 const { getSchedule, endTimeFrom } = require('./schedule.service');
-const { templateRunsOn, resolveAssignees, templateSkippedOn } = require('./recurring-rules');
+const { templateRunsOn, resolveAssignees, templateSkippedOn, nextRunDates, addDays } = require('./recurring-rules');
 const clock = require('../utils/clock');
 const jobs = require('./jobs.service');
 
@@ -45,9 +45,23 @@ const validateTemplateInput = (data) => {
     const days = Array.isArray(data.weekdays) ? data.weekdays.map(Number) : [];
     if (days.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) throw ApiError.badRequest('weekdays must be 0–6 (0 = Sunday)');
   }
+  let day_rule = null;
+  let day_of_month = null;
   if (data.frequency === 'MONTHLY') {
-    const d = Number(data.day_of_month);
-    if (!Number.isInteger(d) || d < 1 || d > 31) throw ApiError.badRequest('day_of_month must be 1–31');
+    // 'LAST' is an explicit choice; anything else is a numbered day 1–30.
+    // 31 is accepted for older clients but stored as LAST, because there is no
+    // 31st in February and the admin should not silently miss that month.
+    if (data.day_rule === 'LAST' || Number(data.day_of_month) >= 31) {
+      day_rule = 'LAST';
+      day_of_month = null;
+    } else {
+      const d = Number(data.day_of_month);
+      if (!Number.isInteger(d) || d < 1 || d > 30) {
+        throw ApiError.badRequest('day_of_month must be 1–30, or choose "Last day of the month"');
+      }
+      day_rule = 'NTH';
+      day_of_month = d;
+    }
   }
   if (!['DEPARTMENT', 'PEOPLE'].includes(data.assignee_mode || 'DEPARTMENT')) {
     throw ApiError.badRequest('assignee_mode must be DEPARTMENT or PEOPLE');
@@ -59,7 +73,8 @@ const validateTemplateInput = (data) => {
     project_id: data.project_id || null,
     frequency: data.frequency,
     weekdays: data.frequency === 'WEEKLY' ? [...new Set((data.weekdays || []).map(Number))] : [],
-    day_of_month: data.frequency === 'MONTHLY' ? Number(data.day_of_month) : null,
+    day_rule,
+    day_of_month,
     start_time: data.start_time,
     duration_minutes: duration,
     priority: data.priority || 'MEDIUM',
@@ -91,8 +106,9 @@ const setMembers = async (templateId, members, transaction) => {
 const createTemplate = async (data, actorId) => {
   const clean = validateTemplateInput(data);
   const transaction = await sequelize.transaction();
+  let template;
   try {
-    const template = await TaskTemplate.create({ ...clean, created_by: actorId }, { transaction });
+    template = await TaskTemplate.create({ ...clean, created_by: actorId }, { transaction });
     await setMembers(template.id, data.members || [], transaction);
     await logAudit({
       actor_user_id: actorId,
@@ -103,11 +119,11 @@ const createTemplate = async (data, actorId) => {
       transaction,
     });
     await transaction.commit();
-    return await getTemplate(template.id);
   } catch (err) {
     await transaction.rollback();
     throw err;
   }
+  return await afterSave(template, { createToday: data.create_today === true, actorId });
 };
 
 const updateTemplate = async (id, data, actorId) => {
@@ -127,11 +143,11 @@ const updateTemplate = async (id, data, actorId) => {
       transaction,
     });
     await transaction.commit();
-    return await getTemplate(id);
   } catch (err) {
     await transaction.rollback();
     throw err;
   }
+  return await afterSave(await TaskTemplate.findByPk(id), { createToday: data.create_today === true, actorId });
 };
 
 // Deactivate rather than delete, so generated tasks keep a valid link.
@@ -149,7 +165,86 @@ const deactivateTemplate = async (id, actorId) => {
   return template;
 };
 
-// ── Generating tasks for a date ──────────────────────────────────────────────
+// ── After saving: "create today?" and "when does it first run?" ─────────────
+
+const nowParts = () => clock.companyParts();
+
+// Whether today's copy can be created if the admin ticked the box, and why not.
+// Returning a reason lets the API tell the admin the truth instead of silently doing nothing.
+const todayEligibility = async (template, now = new Date()) => {
+  const { date, hour, minute } = clock.companyParts(now);
+  const [startH, startM] = String(template.start_time || '00:00').split(':').map(Number);
+  const passedStart = hour > startH || (hour === startH && minute >= startM);
+
+  if (passedStart) {
+    return { date, can: false, code: 'TIME_PASSED', detail: `Today's ${template.start_time} slot has passed.` };
+  }
+  const offDay = await CompanyOffDay.findOne({ where: { date }, attributes: ['date'] });
+  if (offDay) return { date, can: false, code: 'OFF_DAY', detail: 'Today is a company off day.' };
+  if (!templateRunsOn(template, date)) {
+    return { date, can: false, code: 'NOT_DUE', detail: 'This template is not due today.' };
+  }
+  return { date, can: true, code: null, detail: null };
+};
+
+// Next run dates for the admin screen, including whether each is a company off day.
+const upcoming = async (template, fromDate, count = 6) => {
+  const start = fromDate;
+  const end = addDays(start, 400);
+  const offDays = await CompanyOffDay.findAll({
+    where: { date: { [Op.between]: [start, end] } },
+    attributes: ['date'],
+  });
+  return nextRunDates(template, start, { count, offDays: offDays.map((o) => o.date) });
+};
+
+// Shared tail for create / update / start: optionally create today's tasks,
+// then return the template with its upcoming dates and what happened today.
+const afterSave = async (template, { createToday, actorId, startRequested = false }) => {
+  const fresh = await getTemplate(template.id);
+  const eligibility = await todayEligibility(fresh);
+  const result = { today_created: 0, today_status: eligibility.code, today_detail: eligibility.detail };
+
+  if (createToday) {
+    if (!eligibility.can) {
+      result.today_detail = eligibility.detail;
+    } else {
+      const gen = await generateForDate(eligibility.date, { templateId: fresh.id });
+      result.today_created = gen.created;
+      if (gen.created === 0) {
+        result.today_status = 'ALREADY_EXISTS';
+        result.today_detail = "Today's tasks already existed; nothing new was created.";
+      } else {
+        result.today_status = 'CREATED';
+        result.today_detail = `${gen.created} task(s) created for today. The employees were notified.`;
+      }
+    }
+  }
+
+  if (startRequested) {
+    await logAudit({
+      actor_user_id: actorId,
+      action: 'START_TASK_TEMPLATE',
+      entity_type: 'TASK_TEMPLATE',
+      entity_id: fresh.id,
+    });
+  }
+
+  const dates = await upcoming(fresh, clock.companyToday());
+  return { ...fresh.toJSON(), create_today_result: result, upcoming: dates };
+};
+
+// Reactivate a stopped template, optionally with today's tasks.
+const startTemplate = async (id, data, actorId) => {
+  const template = await TaskTemplate.findByPk(id);
+  if (!template) throw ApiError.notFound('Template not found');
+  if (template.is_active) throw ApiError.badRequest('This template is already active');
+  template.is_active = true;
+  await template.save();
+  return await afterSave(template, { createToday: data.create_today === true, actorId, startRequested: true });
+};
+
+
 
 const generateForDate = async (date = clock.companyToday(), { templateId = null } = {}) => {
   const offDay = await CompanyOffDay.findOne({ where: { date }, attributes: ['date'] });
@@ -290,6 +385,8 @@ const registerRecurringJob = () => {
 
 module.exports = {
   listTemplates,
+  startTemplate,
+  upcoming,
   getTemplate,
   createTemplate,
   updateTemplate,
