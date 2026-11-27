@@ -14,9 +14,12 @@ const {
 
 router.use(authenticate);
 
+// Static paths first, so they are not captured by '/:id' below.
+router.get('/my-tasks', taskController.getMyTasks);
+router.get('/time-history/:taskId', taskController.getTimeChanges);
+
 // List & My Tasks
 router.get('/', taskController.listTasks);
-router.get('/my-tasks', taskController.getMyTasks);
 router.get('/:id', taskController.getTaskById);
 
 // Create task (Manager or Admin)
@@ -54,6 +57,9 @@ router.patch(
   validate(updateAssignmentStatusSchema),
   taskController.updateAssignmentStatus
 );
+
+// Employee/Assignee editing the time of their own assignment
+router.patch('/assignments/:assigneeId/time', taskController.editAssignmentTime);
 
 // Add comment
 router.post(

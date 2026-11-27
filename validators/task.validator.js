@@ -28,6 +28,7 @@ const updateTaskSchema = {
 
 const updateAssignmentStatusSchema = {
   body: z.object({
+    // MISSED is set by the end-of-day job, never by a person, so it is not accepted here.
     status: z.enum(['TODO', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED']),
     note: z.string().optional(),
   }),

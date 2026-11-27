@@ -16,6 +16,10 @@ const managerRoutes = require('./routes/manager.routes');
 const adminRoutes = require('./routes/admin.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const scheduleRoutes = require('./routes/schedule.routes');
+const recurringRoutes = require('./routes/recurring.routes');
+const missedRoutes = require('./routes/missed.routes');
+const taskLibraryRoutes = require('./routes/task-library.routes');
 
 const app = express();
 
@@ -53,6 +57,10 @@ app.use(`${API_PREFIX}/manager`, managerRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/attendance`, attendanceRoutes);
 app.use(`${API_PREFIX}/notifications`, notificationRoutes);
+app.use(`${API_PREFIX}/work-schedule`, scheduleRoutes);
+app.use(`${API_PREFIX}/task-templates`, recurringRoutes);
+app.use(`${API_PREFIX}/missed`, missedRoutes);
+app.use(`${API_PREFIX}/task-library`, taskLibraryRoutes);
 
 // Catch 404 and handle errors
 app.use(notFound);

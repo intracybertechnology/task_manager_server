@@ -1,5 +1,6 @@
 const asyncHandler = require('../utils/asyncHandler');
 const taskService = require('../services/task.service');
+const taskTimeService = require('../services/task-time.service');
 
 const createTask = asyncHandler(async (req, res) => {
   const task = await taskService.createTask(req.body, req.user);
@@ -56,6 +57,17 @@ const addComment = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, message: 'Comment added', data: comment });
 });
 
+// Edit the time of one assignment. Self-service for the assignee, or an admin.
+const editAssignmentTime = asyncHandler(async (req, res) => {
+  const data = await taskTimeService.editAssignmentTime(req.params.assigneeId, req.body, req.user);
+  res.status(200).json({ success: true, message: 'Task time updated', data });
+});
+
+const getTimeChanges = asyncHandler(async (req, res) => {
+  const data = await taskTimeService.timeChangesFor(req.params.taskId);
+  res.status(200).json({ success: true, data });
+});
+
 module.exports = {
   createTask,
   listTasks,
@@ -66,4 +78,6 @@ module.exports = {
   removeAssignee,
   updateAssignmentStatus,
   addComment,
+  editAssignmentTime,
+  getTimeChanges,
 };

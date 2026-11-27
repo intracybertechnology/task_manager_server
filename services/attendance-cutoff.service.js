@@ -64,8 +64,11 @@ const runCutoff = async (now = new Date()) => {
     });
   }
 
+  if (written > 0) require('./dashboard-events.service').pingDashboard('ATTENDANCE_CUTOFF');
+
   return { date, written, skipped: written === 0 ? 'nobody to mark absent' : null };
 };
+
 const registerCutoffJob = () => {
   jobs.registerJob({ name: 'attendance-cutoff', atHour: CUTOFF_HOUR, atMinute: CUTOFF_MINUTE, run: () => runCutoff() });
 };

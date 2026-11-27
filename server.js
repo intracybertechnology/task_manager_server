@@ -29,6 +29,8 @@ const startServer = async () => {
       require('./services/autosubmit.service').startAutoSubmitJob();
       require('./services/attendance-cutoff.service').registerCutoffJob();
       require('./services/notification.service').registerCleanupJob();
+      require('./services/recurring.service').registerRecurringJob();
+      require('./services/missed.service').registerMissedJob();
       startJobs();
     });
   } catch (error) {

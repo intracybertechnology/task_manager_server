@@ -19,6 +19,10 @@ const CompanyOffDay = require('./CompanyOffDay');
 const AttendanceException = require('./AttendanceException');
 const Attendance = require('./Attendance');
 const Notification = require('./Notification');
+const TaskTemplate = require('./TaskTemplate');
+const TemplateMember = require('./TemplateMember');
+const TaskTimeChange = require('./TaskTimeChange');
+const TaskLibrary = require('./TaskLibrary');
 // Department <-> User
 Department.hasMany(User, { foreignKey: 'department_id', as: 'users' });
 User.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
@@ -69,6 +73,15 @@ TaskAssignee.belongsTo(Task, { foreignKey: 'task_id', as: 'task' });
 User.hasMany(TaskAssignee, { foreignKey: 'employee_id', as: 'taskAssignments' });
 TaskAssignee.belongsTo(User, { foreignKey: 'employee_id', as: 'employee' });
 TaskAssignee.belongsTo(User, { foreignKey: 'assigned_by', as: 'assigner' });
+
+// Task time changes (append-only history of slot edits)
+Task.hasMany(TaskTimeChange, { foreignKey: 'task_id', as: 'timeChanges' });
+TaskTimeChange.belongsTo(Task, { foreignKey: 'task_id', as: 'task' });
+TaskTimeChange.belongsTo(User, { foreignKey: 'employee_id', as: 'employee' });
+TaskTimeChange.belongsTo(User, { foreignKey: 'changed_by', as: 'changer' });
+
+// Task library
+TaskLibrary.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 
 // Task <-> TaskComment
 Task.hasMany(TaskComment, { foreignKey: 'task_id', as: 'comments' });
@@ -129,6 +142,17 @@ User.hasMany(Attendance, { foreignKey: 'employee_id', as: 'attendanceRecords' })
 Notification.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 User.hasMany(Notification, { foreignKey: 'user_id', as: 'notifications' });
 
+// TaskTemplate <-> TemplateMember / User / Department
+TaskTemplate.hasMany(TemplateMember, { foreignKey: 'template_id', as: 'members', onDelete: 'CASCADE' });
+TemplateMember.belongsTo(TaskTemplate, { foreignKey: 'template_id', as: 'template' });
+TemplateMember.belongsTo(User, { foreignKey: 'employee_id', as: 'employee' });
+TaskTemplate.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+TaskTemplate.belongsTo(Department, { foreignKey: 'department_id', as: 'department' });
+TaskTemplate.belongsTo(Project, { foreignKey: 'project_id', as: 'project' });
+
+// A generated task points back to its template.
+Task.belongsTo(TaskTemplate, { foreignKey: 'template_id', as: 'template' });
+
 module.exports = {
   sequelize,
   User,
@@ -151,4 +175,8 @@ module.exports = {
   AttendanceException,
   Attendance,
   Notification,
+  TaskTemplate,
+  TemplateMember,
+  TaskTimeChange,
+  TaskLibrary,
 };

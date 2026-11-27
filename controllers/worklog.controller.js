@@ -1,6 +1,7 @@
 const asyncHandler = require('../utils/asyncHandler');
 const worklogService = require('../services/worklog.service');
 const { getSubmitReminder: getSubmitReminderService } = require('../services/reminder.service');
+const { worklogPrefill } = require('../services/worklog-prefill.service');
 
 const getCategories = asyncHandler(async (req, res) => {
   const includeInactive = req.user.role === 'ADMIN' && req.query.include_inactive === 'true';
@@ -26,6 +27,11 @@ const updateCategory = asyncHandler(async (req, res) => {
 const getTodayDraft = asyncHandler(async (req, res) => {
   const report = await worklogService.getOrCreateTodayDraft(req.user.id, req);
   res.status(200).json({ success: true, data: report });
+});
+
+const getPrefill = asyncHandler(async (req, res) => {
+  const data = await worklogPrefill(req.user.id);
+  res.status(200).json({ success: true, data });
 });
 
 const getMyReports = asyncHandler(async (req, res) => {
@@ -68,6 +74,7 @@ module.exports = {
   createCategory,
   updateCategory,
   getTodayDraft,
+  getPrefill,
   getMyReports,
   getReportById,
   addEntry,

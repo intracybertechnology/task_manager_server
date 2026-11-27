@@ -217,9 +217,15 @@ const getMyTasks = async (userId, query = {}) => {
             as: 'comments',
             include: [{ model: User, as: 'author', attributes: ['id', 'first_name', 'last_name'] }],
           },
+          // Nested inside the task: TaskTemplate belongs to Task, not TaskAssignee.
+          {
+            model: require('../models').TaskTemplate,
+            as: 'template',
+            attributes: ['id', 'frequency'],
+            required: false,
+          },
         ],
       },
-      { model: User, as: 'assigner', attributes: ['id', 'first_name', 'last_name', 'email'] },
       {
         model: TaskStatusHistory,
         as: 'statusHistories',

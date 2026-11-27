@@ -25,9 +25,15 @@ const TaskAssignee = sequelize.define('TaskAssignee', {
     allowNull: false,
   },
   status: {
-    type: DataTypes.ENUM('TODO', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED'),
-    allowNull: false,
+    type: DataTypes.STRING(16),
     defaultValue: 'TODO',
+    allowNull: false,
+    validate: {
+      isIn: {
+        args: [['TODO', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED', 'MISSED']],
+        msg: 'Invalid task status',
+      },
+    },
   },
   completed_at: {
     type: DataTypes.DATE,

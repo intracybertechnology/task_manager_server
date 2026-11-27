@@ -19,9 +19,10 @@ const TaskStatusHistory = sequelize.define('TaskStatusHistory', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  // Null only for system events such as recurring-task generation.
   changed_by: {
     type: DataTypes.UUID,
-    allowNull: false,
+    allowNull: true,
   },
   change_note: {
     type: DataTypes.TEXT,

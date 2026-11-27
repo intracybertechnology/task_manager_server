@@ -56,8 +56,8 @@ test('a range entirely inside a break has zero working minutes', () => {
   assert.strictEqual(workingMinutesBetween(825, 840, DEFAULT_SCHEDULE.breaks), 0);
 });
 
-test('a 45-minute range straddling a 15-minute break counts only 30 working minutes', () => {
-  assert.strictEqual(workingMinutesBetween(690, 735, DEFAULT_SCHEDULE.breaks), 30); // 11:30–12:15, 11:15–11:30 break does not apply
+test('a 45-minute range straddling the lunch break counts only 30 working minutes', () => {
+  assert.strictEqual(workingMinutesBetween(825, 870, DEFAULT_SCHEDULE.breaks), 30); // 13:45–14:30, lunch 13:30–14:00 leaves 14:00–14:30
 });
 
 test('a range starting inside a break counts only the working part', () => {

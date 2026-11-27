@@ -16,6 +16,7 @@ const {
 const { logAudit } = require('./audit.service');
 const { loadCalendarData } = require('./attendance.service');
 const { getBoardSummary } = require('./attendance-status.service');
+const monitoring = require('./monitoring.service');
 
 const getAdminDashboard = async (query = {}) => {
   // Use local date, not UTC, to avoid off-by-one in IST and similar timezones
@@ -91,9 +92,11 @@ const getAdminDashboard = async (query = {}) => {
     }
   });
 
-  // Time logged by category and project (company-wide, across all submitted reports)
+  // Time logged by category and project, for the SELECTED DATE only.
+  // (The previous version had no date filter and scanned the whole history on
+  //  every dashboard load.)
   const submittedReports = await DailyReport.findAll({
-    where: { status: 'SUBMITTED' },
+    where: { status: 'SUBMITTED', report_date: date },
     include: [
       {
         model: DailyWorklog,
@@ -130,9 +133,17 @@ const getAdminDashboard = async (query = {}) => {
   // Only meaningful for today; the submission panels remain date-driven.
   const attendanceToday = await getBoardSummary();
 
+  // Monitoring: completion for the selected date, and templates running today.
+  const [completionByDepartment, templates] = await Promise.all([
+    monitoring.completionByDepartment(date),
+    monitoring.templatesRunningToday(),
+  ]);
+
   return {
     submission_date: date,
     attendance_today: attendanceToday,
+    completion_by_department: completionByDepartment,
+    templates_today: templates,
     total_employees: totalEmployees,
     total_reporting_users: activeReportingUsers.length,
     total_managers: totalManagers,

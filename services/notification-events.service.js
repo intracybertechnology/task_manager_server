@@ -26,6 +26,7 @@ const supervisorsOf = async (employeeId) => {
 };
 
 const taskAssigned = safe(async ({ actor, task, employeeIds }) => {
+  require('./dashboard-events.service').pingDashboard('TASK_ASSIGNED');
   const recipients = employeeIds.filter((id) => id !== actor.id);
   await notifyUsers({
     userIds: recipients,
@@ -69,6 +70,7 @@ const taskCommentAdded = safe(async ({ actor, task, commentText, assigneeIds }) 
 });
 
 const taskStatusChanged = safe(async ({ actor, assignee, task, oldStatus, newStatus }) => {
+  require('./dashboard-events.service').pingDashboard('TASK_STATUS_CHANGED');
   const employeeName = nameOf(assignee.employee || assignee);
   const title = `${employeeName} moved "${task.title}" to ${String(newStatus).replace('_', ' ')}`;
   const link = '/admin/submission-timeline';
@@ -78,6 +80,7 @@ const taskStatusChanged = safe(async ({ actor, assignee, task, oldStatus, newSta
 });
 
 const attendanceMarked = safe(async ({ employee }) => {
+  require('./dashboard-events.service').pingDashboard('ATTENDANCE_MARKED');
   await notifyAdmins({
     type: 'ATTENDANCE_MARKED',
     title: `${nameOf(employee)} marked attendance`,
@@ -87,6 +90,7 @@ const attendanceMarked = safe(async ({ employee }) => {
 });
 
 const attendanceStatusChanged = safe(async ({ admin, employee, status }) => {
+  require('./dashboard-events.service').pingDashboard('ATTENDANCE_STATUS_CHANGED');
   if (employee.id === admin.id) return;
   await notifyUser({
     userId: employee.id,
@@ -94,6 +98,60 @@ const attendanceStatusChanged = safe(async ({ admin, employee, status }) => {
     title: `Your attendance was set to ${String(status).replace('_', ' ').toLowerCase()}`,
     body: `Set by ${nameOf(admin)}.`,
     link: null,
+  });
+});
+
+// Recurring tasks were generated for today. One notification per person,
+// sent only after the tasks are committed.
+const templateGenerated = safe(async ({ template, task, employeeIds }) => {
+  require('./dashboard-events.service').pingDashboard('RECURRING_TASK');
+  await notifyUsers({
+    userIds: employeeIds,
+    type: 'RECURRING_TASK',
+    title: `New task: ${task.title}`,
+    body: `Scheduled for ${task.task_date}${task.start_time ? ` at ${task.start_time}` : ''}.`,
+    link: '/employee/tasks',
+    taskId: task.id,
+  });
+});
+
+// An assignee moved their task's time. Admins and the person's manager are told,
+// including the original time, which is the doc's requirement.
+const taskTimeChanged = safe(async ({ actor, task, employeeId, oldSlot, newSlot }) => {
+  require('./dashboard-events.service').pingDashboard('TASK_TIME_CHANGED');
+  const employee = await User.findByPk(employeeId, { attributes: ['first_name', 'last_name'] });
+  const title = `${nameOf(employee)} moved "${task.title}" to ${newSlot.date} ${newSlot.start}–${newSlot.end}`;
+  const body = `Was ${oldSlot.date || 'unscheduled'} ${oldSlot.start || ''}${oldSlot.end ? '–' + oldSlot.end : ''}.`.replace(/\s+/g, ' ').trim();
+
+  await notifyAdmins({ type: 'TASK_TIME_CHANGED', title, body, excludeUserId: actor.id, taskId: task.id });
+  const managers = (await supervisorsOf(employeeId)).filter((id) => id !== actor.id);
+  await notifyUsers({ userIds: managers, type: 'TASK_TIME_CHANGED', title, body, link: '/manager/tasks', taskId: task.id });
+});
+
+// End of day: tasks left unfinished became MISSED.
+// Each affected employee gets their own list; admins get ONE summary.
+const tasksMissed = safe(async ({ date, byEmployee }) => {
+  for (const [employeeId, titles] of Object.entries(byEmployee)) {
+    await notifyUser({
+      userId: employeeId,
+      type: 'TASK_MISSED',
+      title: `You missed ${titles.length} task${titles.length === 1 ? '' : 's'} on ${date}`,
+      body: titles.slice(0, 5).join(', ') + (titles.length > 5 ? ', …' : ''),
+      link: '/employee/tasks',
+    });
+  }
+
+  const employees = await User.findAll({
+    where: { id: Object.keys(byEmployee) },
+    attributes: ['first_name', 'last_name'],
+  });
+  const names = employees.map((e) => `${e.first_name} ${e.last_name}`).join(', ');
+  const total = Object.values(byEmployee).reduce((n, t) => n + t.length, 0);
+  await notifyAdmins({
+    type: 'TASK_MISSED_SUMMARY',
+    title: `${total} task${total === 1 ? '' : 's'} missed on ${date}`,
+    body: names,
+    link: '/admin/missed',
   });
 });
 
@@ -151,7 +209,10 @@ module.exports = {
   taskAssigned,
   taskCommentAdded,
   taskStatusChanged,
+  taskTimeChanged,
+  tasksMissed,
   attendanceMarked,
   attendanceStatusChanged,
+  templateGenerated,
   loginDigest,
 };

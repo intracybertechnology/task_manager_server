@@ -263,6 +263,7 @@ const setStatus = async (adminUser, { employee_id, date, status, reason }, now =
     new_values: audit,
   });
 
+  require('./dashboard-events.service').pingDashboard('ATTENDANCE_STATUS_CHANGED');
   require('./notification-events.service').attendanceStatusChanged({
     admin: adminUser,
     employee,

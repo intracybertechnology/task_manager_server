@@ -40,6 +40,12 @@ const login = async (email, password, ipAddress = null) => {
 
   const token = generateToken(user);
 
+  // Catch-up: if the 00:05 job could not run (server down), create today's
+  // recurring tasks now. Idempotent, so this is harmless when it did run.
+  if (user.role !== 'ADMIN') {
+    require('./recurring.service').catchUpForEmployee(user);
+  }
+
   await logAudit({
     actor_user_id: user.id,
     action: 'USER_LOGIN',
